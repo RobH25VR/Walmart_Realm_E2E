@@ -1,0 +1,24 @@
+{
+  "name": "walmart_realm_e2e",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/RobH25VR/Walmart_Realm_E2E.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/RobH25VR/Walmart_Realm_E2E/issues"
+  },
+  "homepage": "https://github.com/RobH25VR/Walmart_Realm_E2E#readme",
+  "devDependencies": {
+    "@playwright/test": "^1.55.0"
+  }
+}
