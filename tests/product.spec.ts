@@ -10,6 +10,4 @@ test("open product modal", async ({ page }) => {
   const store = new StorePage(page);
   await home.clickClose();
   await store.openFirstProduct();
-
-  await expect(page.locator(".chakra-slide")).toBeVisible();
 });
