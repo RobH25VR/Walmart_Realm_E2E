@@ -1,0 +1,88 @@
+name: Daily Playwright Tests
+
+on:
+  schedule:
+    # Runs daily at 4pm UK time (handles BST/GMT automatically)
+    - cron: "0 16 * * *"
+      timezone: Europe/London
+  workflow_dispatch:
+
+jobs:
+  playwright:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps
+
+      # Run tests and always produce a JSON + HTML report
+      - name: Run Playwright tests
+        id: playwright
+        run: |
+          npx playwright test --reporter=list,json,html || true
+
+      # Extract failed test count from JSON report
+      - name: Get failed test count
+        id: failed_tests
+        run: |
+          FAILED=$(jq '.stats.unexpected' playwright-report/report.json)
+          echo "failed=$FAILED" >> $GITHUB_OUTPUT
+
+      # Upload HTML report (even on failure)
+      - name: Upload Playwright HTML report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-html-report
+          path: playwright-report
+          retention-days: 7
+
+      # Fail the job if tests failed
+      - name: Mark job as failed
+        if: steps.failed_tests.outputs.failed != '0'
+        run: exit 1
+
+      # 🔴 Slack notification ONLY if job fails
+      - name: Notify Slack on failure
+        if: failure()
+        uses: slackapi/slack-github-action@v1.25.0
+        with:
+          payload: |
+            {
+              "text": "❌ *Daily Playwright tests failed*",
+              "attachments": [
+                {
+                  "color": "#ff0000",
+                  "fields": [
+                    {
+                      "title": "Failed tests",
+                      "value": "${{ steps.failed_tests.outputs.failed }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Branch",
+                      "value": "${{ github.ref_name }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Report",
+                      "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View HTML report>"
+                    }
+                  ]
+                }
+              ]
+            }
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          
