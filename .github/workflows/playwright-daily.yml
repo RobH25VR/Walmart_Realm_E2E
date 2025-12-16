@@ -1,10 +1,8 @@
-name: Daily Playwright Tests
+name: Daily Realm Tests
 
 on:
   schedule:
-    # Runs daily at 4pm UK time (handles BST/GMT automatically)
     - cron: "0 16 * * *"
-      timezone: Europe/London
   workflow_dispatch:
 
 jobs:
@@ -15,7 +13,7 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Setup Node
+      - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
           node-version: 20
@@ -26,20 +24,24 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
-      # Run tests and always produce a JSON + HTML report
+      # Run Playwright tests with JSON + HTML reports
       - name: Run Playwright tests
         id: playwright
         run: |
           npx playwright test --reporter=list,json,html || true
 
-      # Extract failed test count from JSON report
+      # Safely extract failed test count
       - name: Get failed test count
         id: failed_tests
         run: |
-          FAILED=$(jq '.stats.unexpected' playwright-report/report.json)
+          if [ -f playwright-report/report.json ]; then
+            FAILED=$(jq '.stats.unexpected' playwright-report/report.json)
+          else
+            FAILED=0
+          fi
           echo "failed=$FAILED" >> $GITHUB_OUTPUT
 
-      # Upload HTML report (even on failure)
+      # Upload HTML report even if tests fail
       - name: Upload Playwright HTML report
         if: always()
         uses: actions/upload-artifact@v4
@@ -48,12 +50,12 @@ jobs:
           path: playwright-report
           retention-days: 7
 
-      # Fail the job if tests failed
-      - name: Mark job as failed
+      # Fail job if there are failed tests
+      - name: Fail if any tests failed
         if: steps.failed_tests.outputs.failed != '0'
         run: exit 1
 
-      # 🔴 Slack notification ONLY if job fails
+      # Notify Slack only if job fails
       - name: Notify Slack on failure
         if: failure()
         uses: slackapi/slack-github-action@v1.25.0
@@ -65,24 +67,12 @@ jobs:
                 {
                   "color": "#ff0000",
                   "fields": [
-                    {
-                      "title": "Failed tests",
-                      "value": "${{ steps.failed_tests.outputs.failed }}",
-                      "short": true
-                    },
-                    {
-                      "title": "Branch",
-                      "value": "${{ github.ref_name }}",
-                      "short": true
-                    },
-                    {
-                      "title": "Report",
-                      "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View HTML report>"
-                    }
+                    { "title": "Failed tests", "value": "${{ steps.failed_tests.outputs.failed }}", "short": true },
+                    { "title": "Branch", "value": "${{ github.ref_name }}", "short": true },
+                    { "title": "Report", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View HTML report>" }
                   ]
                 }
               ]
             }
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-          
