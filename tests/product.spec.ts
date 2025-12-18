@@ -8,6 +8,8 @@ test("open product modal", async ({ page }) => {
   await home.clickRealm("Cyberpunk City");
 
   const store = new StorePage(page);
+  await page.waitForTimeout(3000);
+
   await home.clickClose();
   await store.openFirstProduct();
 });

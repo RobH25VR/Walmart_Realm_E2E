@@ -8,6 +8,8 @@ test("add product to cart and verify cart count", async ({ page }) => {
     await home.clickRealm("Gingerbread Boutique");
 
     const store = new StorePage(page);
+    await page.waitForTimeout(3000);
+
     await home.clickClose();
     await store.openFirstProduct();
 

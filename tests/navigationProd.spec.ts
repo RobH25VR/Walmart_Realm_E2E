@@ -15,7 +15,11 @@ test.describe("UI navigation", () => {
   test("opens a product modal from the experience view", async ({ page }) => {
     const home = new HomePage(page);
     await home.open();
+    await page.waitForTimeout(3000);
+
     await home.clickRealm("Gingerbread Boutique");
+    await page.waitForTimeout(3000);
+
     await home.clickClose();
 
     const store = new StorePage(page);
