@@ -5,7 +5,12 @@ export default defineConfig({
   timeout: 30 * 1000, // 30 seconds per test
   retries: 3, // set retries if needed
   workers: 1, // run tests with 1 worker
-  reporter: [['list'], ['html']], // optional: HTML report
+  reporter: 
+  [['list'],
+   ['html'],
+  ['json', { outputFile: 'playwright-report/report.json' }]
+],
+  // optional: HTML report
   use: {
     headless: true, // run in headless mode
     viewport: { width: 1280, height: 720 },

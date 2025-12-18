@@ -2,6 +2,7 @@ name: Daily Realm Tests
 
 on:
   schedule:
+    # Daily at 4pm UK time (BST/GMT safe)
     - cron: "0 16 * * *"
   workflow_dispatch:
 
@@ -10,9 +11,11 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - uses: actions/setup-node@v4
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
@@ -22,11 +25,11 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
-      # Run tests but don't fail yet
+      # Run tests (do not fail yet)
       - name: Run Playwright tests
-        run: npx playwright test --reporter=list,json,html || true
+        run: npx playwright test || true
 
-      # Get failed test count safely
+      # Extract failed test count
       - name: Get failed test count
         id: failed_tests
         run: |
@@ -36,19 +39,23 @@ jobs:
             FAILED=0
           fi
           echo "failed=$FAILED" >> $GITHUB_OUTPUT
+          echo "Failed tests: $FAILED"
 
-      # Upload report always
+      # Upload HTML report
       - name: Upload Playwright HTML report
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: playwright-html-report
           path: playwright-report
+          retention-days: 7
 
-      # 🔔 Slack notification based on failed count
+      # Notify Slack only if tests failed
       - name: Notify Slack on failure
         if: steps.failed_tests.outputs.failed != '0'
         uses: slackapi/slack-github-action@v1.25.0
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
           payload: |
             {
@@ -57,16 +64,29 @@ jobs:
                 {
                   "color": "#ff0000",
                   "fields": [
-                    { "title": "Failed tests", "value": "${{ steps.failed_tests.outputs.failed }}", "short": true },
-                    { "title": "Run", "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View report>" }
+                    {
+                      "title": "Failed tests",
+                      "value": "${{ steps.failed_tests.outputs.failed }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Branch",
+                      "value": "${{ github.ref_name }}",
+                      "short": true
+                    },
+                    {
+                      "title": "Run",
+                      "value": "<${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}|View HTML report>"
+                    }
                   ]
                 }
               ]
             }
-        env:
-          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 
-      # ❌ Explicitly fail the job
+      # Explicitly fail the job
       - name: Fail job if tests failed
-        if: steps.failed_tests.outputs.failed != '0'
-        run: exit 1
+        run: |
+          if [ "${{ steps.failed_tests.outputs.failed }}" != "0" ]; then
+            echo "❌ Failing job due to test failures"
+            exit 1
+          fi
