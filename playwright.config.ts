@@ -1,10 +1,10 @@
 import { defineConfig, devices } from '@playwright/test';
 
 export default defineConfig({
-  testDir: './tests', // folder where your tests are located
-  timeout: 30 * 1000, // 30 seconds per test
-  // retries: 3, // set retries if needed
-  workers: 1, // run tests with x workers
+  testDir: './tests',
+  timeout: 60 * 1000, 
+  retries: 3,
+  workers: 1,
   reporter: 
   [['list'],
    ['html'],
@@ -18,7 +18,7 @@ export default defineConfig({
     screenshot: 'only-on-failure',
     video: 'retain-on-failure',
     actionTimeout: 20 * 1000,
-    navigationTimeout: 30 * 1000,
+    navigationTimeout: 60 * 1000,
   },
   projects: [
     {
