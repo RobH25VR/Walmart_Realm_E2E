@@ -14,6 +14,7 @@ test("add product to cart and verify cart count", async ({ page }) => {
     await store.openFirstProductOniPhone();
 
     await store.addProduct();
+    await store.clickProjectionCard();
     await expect(page.locator('iframe[title="Experience"]').contentFrame().locator('.css-4mn7u8')).toHaveText("1");
 });
 

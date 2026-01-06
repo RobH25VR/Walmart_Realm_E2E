@@ -6,6 +6,7 @@ export class StorePage {
   readonly iframe: Locator;
   readonly addProductButton: Locator;
   readonly productCloseButton: Locator;
+  readonly projectionCard: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -17,8 +18,19 @@ export class StorePage {
 
     this.productCloseButton = page
       .frameLocator('iframe[title="Experience"]')
-      .locator('button:has(svg.chakra-icon)')
-      .filter({ has: page.locator('button:visible') });
+      .locator('svg.chakra-icon');
+
+    this.projectionCard = page
+    .frameLocator('iframe[title="Experience"]')
+    .locator('div[draggable="false"]')
+  }
+
+  async clickProjectionCard() {
+    await this.projectionCard.waitFor({ state: 'visible', timeout: 5000 });
+    await this.projectionCard.click({ force: true });
+    await this.page.waitForTimeout(2000);
+    await this.productCloseButton.nth(2).click({ force: true });
+    await this.page.waitForTimeout(2000);
   }
 
   async openFirstProduct() {
