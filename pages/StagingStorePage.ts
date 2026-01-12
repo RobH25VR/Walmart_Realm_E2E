@@ -254,12 +254,13 @@ export class StorePage {
     if (videoButtonHandle) {
       await this.scrollElementIntoView(videoButtonHandle);
       // Wait again after scrolling for animation to settle
-      await this.page.waitForTimeout(500);
+      await this.page.waitForTimeout(1000);
     }
     
     // Click the video button
     await videoButton.first().click({ force: true });
     await this.page.waitForTimeout(300);
+    await videoButton.first().click({ force: true });
   }
 
   async waitForVideoToAppear() {
