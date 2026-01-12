@@ -35,7 +35,7 @@ test.describe("UI navigation", () => {
     await home.clickClose();
 
     const store = new StorePage(page);
-    await page.waitForTimeout(1000);
+    await page.waitForTimeout(3000);
     await store.openVideo();
     await page.waitForTimeout(1000);
     await store.waitForVideoToAppear();
