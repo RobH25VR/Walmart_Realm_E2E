@@ -1,0 +1,41 @@
+name: Performance Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      perf_target_url:
+        description: 'Comma-separated URLs for performance tests'
+        required: false
+        default: 'https://walmartrealm.com/'
+        type: string
+
+jobs:
+  perf:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright browsers
+        run: npx playwright install chromium --with-deps
+
+      - name: Run performance tests
+        env:
+          PERF_TARGET_URL: ${{ github.event.inputs.perf_target_url }}
+        run: npx playwright test -c playwright.perf.config.ts
+
+      - name: Upload perf results
+        uses: actions/upload-artifact@v4
+        with:
+          name: perf-results
+          path: perf-results
+          retention-days: 7

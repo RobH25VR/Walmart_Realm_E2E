@@ -1,16 +1,9 @@
-name: Daily Realm Tests
+name: Functional Tests
 
 on:
   schedule:
-    # 10am, Monday to Friday
     - cron: "0 10 * * 1-5"
   workflow_dispatch:
-    inputs:
-      perf_target_url:
-        description: 'URL for performance tests'
-        required: false
-        default: 'https://walmartrealm.com/'
-        type: string
 
 jobs:
   playwright:
@@ -31,11 +24,9 @@ jobs:
       - name: Install Playwright browsers
         run: npx playwright install --with-deps
 
-      # Run tests, excluding perf (do not fail yet)
-      - name: Run Playwright tests
-        run: npx playwright test $(find tests -name '*.spec.ts' ! -path '*/perf/*') || true
+      - name: Run functional tests
+        run: npx playwright test -c playwright.functional.config.ts || true
 
-      # Extract failed test count
       - name: Get failed test count
         id: failed_tests
         run: |
@@ -47,7 +38,6 @@ jobs:
           echo "failed=$FAILED" >> $GITHUB_OUTPUT
           echo "Failed tests: $FAILED"
 
-      # Upload HTML report
       - name: Upload Playwright HTML report
         if: always()
         uses: actions/upload-artifact@v4
@@ -56,7 +46,6 @@ jobs:
           path: playwright-report
           retention-days: 7
 
-      # Notify Slack only if tests failed
       - name: Notify Slack on failure
         if: steps.failed_tests.outputs.failed != '0'
         uses: slackapi/slack-github-action@v1.25.0
@@ -65,7 +54,7 @@ jobs:
         with:
           payload: |
             {
-              "text": "❌ *Daily Playwright tests failed*",
+              "text": "❌ *Daily Playwright functional tests failed*",
               "attachments": [
                 {
                   "color": "#ff0000",
@@ -89,41 +78,9 @@ jobs:
               ]
             }
 
-      # Explicitly fail the job
       - name: Fail job if tests failed
         run: |
           if [ "${{ steps.failed_tests.outputs.failed }}" != "0" ]; then
             echo "❌ Failing job due to test failures"
             exit 1
           fi
-
-  perf:
-    runs-on: ubuntu-latest
-    if: github.event_name == 'workflow_dispatch'
-
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: 20
-
-      - name: Install dependencies
-        run: npm ci
-
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps
-
-      - name: Run performance tests
-        env:
-          PERF_TARGET_URL: ${{ github.event.inputs.perf_target_url || 'https://walmartrealm.com/' }}
-        run: npx playwright test tests/perf/realm.perf.spec.ts --project=chromium
-
-      - name: Upload perf results
-        uses: actions/upload-artifact@v4
-        with:
-          name: perf-results
-          path: perf-results
-          retention-days: 7
