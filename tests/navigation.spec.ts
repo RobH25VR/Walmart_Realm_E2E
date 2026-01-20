@@ -66,6 +66,7 @@ test.describe("UI navigation", () => {
     await store.clickFindSpark();
     await page.waitForTimeout(1000);
 
+    await page.goto('https://walmart.emperia-staging.com/#/viewer/axaila/kpopbeauty');
     await home.clickClose();
 
        // Get the experience iframe and click at coordinates (845, 350)
