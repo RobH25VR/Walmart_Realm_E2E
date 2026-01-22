@@ -3,17 +3,80 @@ import fs from 'fs';
 import path from 'path';
 import { PerfMetrics } from './types';
 
+/**
+ * Allow comma-separated URLs via PERF_TARGET_URL
+ * Defaults to Walmart Realm
+ */
 function parseTargetUrls(): string[] {
   const raw = process.env.PERF_TARGET_URL || 'https://walmartrealm.com/';
   return raw.split(',').map(u => u.trim()).filter(Boolean);
 }
 
+/**
+ * Sample real render FPS using requestAnimationFrame
+ */
+async function sampleFps(page, durationMs = 3000) {
+  return page.evaluate((duration) => {
+    return new Promise<{
+      avgFps: number;
+      minFps: number;
+      fpsSampleDurationMs: number;
+    }>(resolve => {
+      const frameTimes: number[] = [];
+      let last = performance.now();
+      const start = last;
+
+      function frame(now: number) {
+        frameTimes.push(now - last);
+        last = now;
+
+        if (now - start < duration) {
+          requestAnimationFrame(frame);
+        } else {
+          const fpsValues = frameTimes
+            .filter(t => t > 0)
+            .map(t => 1000 / t);
+
+          const avgFps =
+            fpsValues.reduce((a, b) => a + b, 0) / fpsValues.length || 0;
+
+          const minFps = Math.min(...fpsValues, avgFps || 0);
+
+          resolve({
+            avgFps: Math.round(avgFps),
+            minFps: Math.round(minFps),
+            fpsSampleDurationMs: duration,
+          });
+        }
+      }
+
+      requestAnimationFrame(frame);
+    });
+  }, durationMs);
+}
+
+/**
+ * Wait until the Realm iframe and its canvas are actually rendering
+ */
+async function waitForRealmCanvas(page) {
+  // Wait for the Experience iframe to be visible (more specific selector to avoid ambiguity)
+  const experienceIframe = page.locator('iframe[title="Experience"]');
+  await experienceIframe.first().waitFor({
+    state: 'visible',
+    timeout: 30_000,
+  });
+
+  // Small warm-up to avoid shader-compile spikes
+  await page.waitForTimeout(500);
+}
+
 test('Walmart Realm performance snapshot', async ({ page }) => {
   const urls = parseTargetUrls();
+
   const apiCalls: PerfMetrics['apiCalls'] = [];
   const failedRequests: PerfMetrics['failedRequests'] = [];
 
-  // Successful responses (for timing)
+  // Capture successful responses (timings)
   page.on('response', response => {
     const status = response.status();
 
@@ -25,7 +88,7 @@ test('Walmart Realm performance snapshot', async ({ page }) => {
       });
     }
 
-    // Capture HTTP failures
+    // HTTP errors
     if (status >= 400) {
       failedRequests.push({
         url: response.url(),
@@ -36,7 +99,7 @@ test('Walmart Realm performance snapshot', async ({ page }) => {
     }
   });
 
-  // Capture aborted / failed requests
+  // Aborted / network-level failures
   page.on('requestfailed', request => {
     failedRequests.push({
       url: request.url(),
@@ -52,25 +115,22 @@ test('Walmart Realm performance snapshot', async ({ page }) => {
 
   for (let i = 0; i < urls.length; i++) {
     const targetUrl = urls[i];
+
     apiCalls.length = 0;
     failedRequests.length = 0;
 
-    // Force a full document load: hash-only changes on the same origin are
-    // same-document navigations, so performance.getEntriesByType('navigation') and
-    // LCP would keep returning the first load. Going to about:blank first
-    // ensures the next goto does a real load and we get fresh metrics per URL.
+    // Force a full navigation so nav timing & LCP reset
     await page.goto('about:blank');
-    apiCalls.length = 0;
-    failedRequests.length = 0;
 
     await page.goto(targetUrl);
 
-    // Navigation timing
+    // Navigation timing (type-safe)
     const nav = await page.evaluate(() => {
-      const [n] = performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
+      const [n] =
+        performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
       return {
-        domContentLoaded: n.domContentLoadedEventEnd,
-        loadEvent: n.loadEventEnd,
+        domContentLoaded: n?.domContentLoadedEventEnd ?? 0,
+        loadEvent: n?.loadEventEnd ?? 0,
       };
     });
 
@@ -83,17 +143,31 @@ test('Walmart Realm performance snapshot', async ({ page }) => {
       });
     });
 
+    // Realm-specific FPS (after iframe + canvas are ready)
+    await waitForRealmCanvas(page);
+    const fps = await sampleFps(page, 3000);
+
     const perf: PerfMetrics = {
       url: page.url(),
       timestamp: new Date().toISOString(),
+
       domContentLoaded: nav.domContentLoaded,
       loadEvent: nav.loadEvent,
       lcp,
+
+      avgFps: fps.avgFps,
+      minFps: fps.minFps,
+      fpsSampleDurationMs: fps.fpsSampleDurationMs,
+
       apiCalls: [...apiCalls],
       failedRequests: [...failedRequests],
     };
 
-    const filePath = path.join(outputDir, `realm-perf-${runId}-${i}.json`);
+    const filePath = path.join(
+      outputDir,
+      `realm-perf-${runId}-${i}.json`
+    );
+
     fs.writeFileSync(filePath, JSON.stringify(perf, null, 2));
   }
 });
