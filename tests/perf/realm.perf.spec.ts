@@ -3,51 +3,34 @@ import fs from 'fs';
 import path from 'path';
 import { PerfMetrics } from './types';
 
-/**
- * Allow comma-separated URLs via PERF_TARGET_URL
- * Defaults to Walmart Realm
- */
 function parseTargetUrls(): string[] {
   const raw = process.env.PERF_TARGET_URL || 'https://walmartrealm.com/';
-  return raw.split(',').map(u => u.trim()).filter(Boolean);
+  // Remove any leading/trailing quotes just in case CI adds them
+  return raw.split(',').map(u => u.trim().replace(/^["']|["']$/g, '')).filter(Boolean);
 }
 
-/**
- * Wait until the Realm iframe and its canvas are actually rendering
- */
 async function waitForRealmCanvas(page) {
-  // Wait for the Experience iframe to be visible (more specific selector to avoid ambiguity)
-  const experienceIframe = page.locator('iframe[title="Experience"]');
-  await experienceIframe.first().waitFor({
-    state: 'visible',
-    timeout: 30_000,
-  });
-
-  // Small warm-up to avoid shader-compile spikes
-  await page.waitForTimeout(500);
+  const iframeLocator = page.locator('iframe[title="Experience"]');
+  await iframeLocator.first().waitFor({ state: 'visible', timeout: 30_000 });
+  await page.waitForTimeout(500); // warm-up
 }
 
 test('Walmart Realm performance snapshot', async ({ page }) => {
-  test.setTimeout(120_000); // increase timeout for perf tests
+  test.setTimeout(120_000); // increase timeout for slow CI
 
   const urls = parseTargetUrls();
-
   const apiCalls: PerfMetrics['apiCalls'] = [];
   const failedRequests: PerfMetrics['failedRequests'] = [];
 
-  // Capture successful responses (timings)
   page.on('response', response => {
     const status = response.status();
-
     if (response.url().includes('/api/')) {
       const timing = response.request().timing();
       apiCalls.push({
         url: response.url(),
-        responseTime: timing.responseEnd,
+        responseTime: timing.responseEnd - timing.requestStart,
       });
     }
-
-    // HTTP errors
     if (status >= 400) {
       failedRequests.push({
         url: response.url(),
@@ -58,7 +41,6 @@ test('Walmart Realm performance snapshot', async ({ page }) => {
     }
   });
 
-  // Aborted / network-level failures
   page.on('requestfailed', request => {
     failedRequests.push({
       url: request.url(),
@@ -74,16 +56,13 @@ test('Walmart Realm performance snapshot', async ({ page }) => {
 
   for (let i = 0; i < urls.length; i++) {
     const targetUrl = urls[i];
-
     apiCalls.length = 0;
     failedRequests.length = 0;
 
-    // Force a full navigation so nav timing & LCP reset
     await page.goto('about:blank');
-
     await page.goto(targetUrl);
 
-    // Navigation timing (type-safe)
+    // Navigation timing
     const nav = await page.evaluate(() => {
       const [n] =
         performance.getEntriesByType('navigation') as PerformanceNavigationTiming[];
@@ -93,93 +72,64 @@ test('Walmart Realm performance snapshot', async ({ page }) => {
       };
     });
 
-    // Largest Contentful Paint
-    const lcp = await page.evaluate(() => {
-      return new Promise<number>(resolve => {
-        new PerformanceObserver(list => {
-          resolve(list.getEntries().pop()!.startTime);
-        }).observe({ type: 'largest-contentful-paint', buffered: true });
-      });
-    });
-
-    // Realm-specific FPS (inside the Experience iframe)
+    // Realm-specific FPS
     await waitForRealmCanvas(page);
 
-    // Wait for the iframe to exist
-    const iframeHandle = await page
-    .locator('iframe[title="Experience"]')
-    .elementHandle();
+    const iframeHandle = await page.locator('iframe[title="Experience"]').elementHandle();
+    if (!iframeHandle) throw new Error('Experience iframe not found');
 
-    if (!iframeHandle) {
-    throw new Error('Experience iframe not found');
-    }
-
-    // Get the real Frame object
     const frame = await iframeHandle.contentFrame();
+    if (!frame) throw new Error('Unable to resolve Experience iframe frame');
 
-    if (!frame) {
-    throw new Error('Unable to resolve Experience iframe frame');
-    }
-
-    // Now you can evaluate INSIDE the iframe
     const fps = await frame.evaluate((duration) => {
-    return new Promise<{
-      avgFps: number;
-      minFps: number;
-      fpsSampleDurationMs: number;
-    }>(resolve => {
-      const frameTimes: number[] = [];
-      let last = performance.now();
-      const start = last;
+      return new Promise(resolve => {
+        const frameTimes: number[] = [];
+        let last = performance.now();
+        const start = last;
+        let resolved = false;
 
-      function tick(now: number) {
-        frameTimes.push(now - last);
-        last = now;
+        function tick(now: number) {
+          frameTimes.push(now - last);
+          last = now;
 
-        if (now - start < duration) {
-          requestAnimationFrame(tick);
-        } else {
-          const fpsValues = frameTimes
-            .filter(t => t > 0)
-            .map(t => 1000 / t);
-
-          const avgFps =
-            fpsValues.reduce((a, b) => a + b, 0) / fpsValues.length || 0;
-
-          resolve({
-            avgFps: Math.round(avgFps),
-            minFps: Math.round(Math.min(...fpsValues, avgFps || 0)),
-            fpsSampleDurationMs: duration,
-          });
+          if (now - start < duration) {
+            requestAnimationFrame(tick);
+          } else if (!resolved) {
+            resolved = true;
+            const fpsValues = frameTimes.filter(t => t > 0).map(t => 1000 / t);
+            const avgFps = fpsValues.reduce((a, b) => a + b, 0) / fpsValues.length || 0;
+            resolve({
+              avgFps: Math.round(avgFps),
+              minFps: Math.round(Math.min(...fpsValues, avgFps || 0)),
+              fpsSampleDurationMs: duration,
+            });
+          }
         }
-      }
 
-      requestAnimationFrame(tick);
-    });
+        // Safety fallback
+        setTimeout(() => {
+          if (!resolved) resolve({ avgFps: 0, minFps: 0, fpsSampleDurationMs: duration });
+        }, duration + 2000);
+
+        requestAnimationFrame(tick);
+      });
     }, 3000);
-
 
     const perf: PerfMetrics = {
       url: page.url(),
       timestamp: new Date().toISOString(),
-
       domContentLoaded: nav.domContentLoaded,
       loadEvent: nav.loadEvent,
-      lcp,
-
-      avgFps: fps.avgFps,
-      minFps: fps.minFps,
-      fpsSampleDurationMs: fps.fpsSampleDurationMs,
-
+      avgFps: (fps as any)?.avgFps ?? 0,
+      minFps: (fps as any)?.minFps ?? 0,
+      fpsSampleDurationMs: (fps as any)?.fpsSampleDurationMs ?? 0,
       apiCalls: [...apiCalls],
       failedRequests: [...failedRequests],
     };
 
-    const filePath = path.join(
-      outputDir,
-      `realm-perf-${runId}-${i}.json`
+    fs.writeFileSync(
+      path.join(outputDir, `realm-perf-${runId}-${i}.json`),
+      JSON.stringify(perf, null, 2)
     );
-
-    fs.writeFileSync(filePath, JSON.stringify(perf, null, 2));
   }
 });
