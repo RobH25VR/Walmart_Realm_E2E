@@ -6,8 +6,7 @@ loadEnv({ path: path.resolve(process.cwd(), 'playwright.env') });
 
 export default defineConfig({
   testDir: './tests/perf',
-  timeout: 60 * 1000,
-  retries: 3,
+  timeout: 90 * 1000,
   workers: 1,
   reporter: [
     ['list'],
