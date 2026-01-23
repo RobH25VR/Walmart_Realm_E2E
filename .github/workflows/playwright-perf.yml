@@ -30,7 +30,8 @@ jobs:
 
       - name: Run performance tests
         env:
-          PERF_TARGET_URL: ${{ github.event.inputs.perf_target_url }}
+          # Wrap the entire value in double quotes to preserve # and commas
+          PERF_TARGET_URL: "${{ github.event.inputs.perf_target_url }}"
         run: npx playwright test -c playwright.perf.config.ts
 
       - name: Upload perf results
@@ -39,3 +40,4 @@ jobs:
           name: perf-results
           path: perf-results
           retention-days: 7
+          
