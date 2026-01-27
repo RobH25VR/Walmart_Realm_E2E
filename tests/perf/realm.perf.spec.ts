@@ -10,9 +10,10 @@ function parseTargetUrls(): string[] {
 }
 
 async function waitForRealmCanvas(page) {
+  await page.waitForTimeout(1000);
   const iframeLocator = page.locator('iframe[title="Experience"]');
   await iframeLocator.first().waitFor({ state: 'visible', timeout: 30_000 });
-  await page.waitForTimeout(500); // warm-up
+  await page.waitForTimeout(500);
 }
 
 test('Walmart Realm performance snapshot', async ({ page }) => {
