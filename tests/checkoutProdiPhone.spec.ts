@@ -17,11 +17,13 @@ test("add product to cart and verify cart count", async ({ page }) => {
 
     await store.addProduct();
     await store.clickProjectionCard();
+    await store.addProduct();
+    await store.clickProjectionCard();
     await expect(
       page
         .locator('iframe[title="Experience"]')
         .contentFrame()
         .locator('.css-4mn7u8')
-    ).toHaveText(/^[12]$/);
+    ).toHaveText(/^[123]$/);
 });
 
