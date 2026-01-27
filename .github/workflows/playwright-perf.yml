@@ -50,7 +50,7 @@ jobs:
 
       # 8️⃣ Generate performance graphs
       - name: Generate performance graphs
-        run: node ./dist/scripts/generate-perf-graphs.js
+        run: node ./dist/generate-perf-graphs.js
 
       # 9️⃣ Upload perf JSON results
       - name: Upload perf results
