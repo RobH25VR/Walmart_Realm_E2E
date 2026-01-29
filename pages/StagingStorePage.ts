@@ -39,11 +39,11 @@ export class StorePage {
 
     this.sparksButton = page
       .frameLocator('iframe[title="Experience"]')
-      .getByText('Find Sparks')
+      .getByText('Find Sparks');
 
     this.hiddenRoom = page
       .frameLocator('iframe[title="Experience"]')
-      .getByText('See the shop')
+      .getByRole('button', { name: /See the shop|Hidden Room|Enter shop/i });
   };
 
 
@@ -421,6 +421,19 @@ export class StorePage {
   }
 
   async clickHiddenRoom() {
-    await this.hiddenRoom.click();
+    await this.page.waitForTimeout(1000);
+    await this.hiddenRoom.first().waitFor({ state: 'visible', timeout: 20000 });
+
+    const elementHandle = await this.hiddenRoom.first().elementHandle();
+    if (elementHandle) {
+      await this.scrollElementIntoView(elementHandle);
+    }
+
+    try {
+      await this.hiddenRoom.first().click({ timeout: 20000 });
+    } catch (error) {
+      await this.page.waitForTimeout(1000);
+      await this.hiddenRoom.first().click({ timeout: 20000, force: true });
+    }
   }
 }

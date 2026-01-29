@@ -2,47 +2,50 @@
 
 ## Project Structure & Module Organization
 
-- `pages/` implements Playwright Page Object Model helpers such as `HomePage.ts` and `StorePage.ts` for navigation and store interactions.
-- `tests/` contains the executable E2E specifications (`*.spec.ts`) grouped by topic (homepage, navigation, product, checkout).
-- `playwright.config.ts` is available for test configuration (currently empty, ready for customization).
-- `test-results/` stores Playwright artifacts from prior runs; the `.last-run.json` file tracks the most recent execution summary.
-- Root files: `package.json` (scripts and dependencies), `package-lock.json`, and `node_modules/` (installed tooling).
+- `pages/` holds Playwright Page Object Model helpers split by environment (`StagingHomePage.ts`, `ProdStorePage.ts`, etc.).
+- `tests/` contains spec files for desktop, iPhone, and prod deployments; `tests/perf/` focuses on frame-rate and navigation timing capture.
+- `playwright.config.ts` plus the specialized `playwright.functional.config.ts` and `playwright.perf.config.ts` define retries, projects, and reporters.
+- `perf-results/` stores JSON metrics emitted by the performance suite and `perf-graphs/` receives PNG charts generated from those metrics.
+- `scripts/generate-perf-graphs.ts` is the only compiled TypeScript artifact (output goes to `dist/`). GitHub Actions live under `.github/workflows/`.
 
 ## Build, Test, and Development Commands
 
 ```bash
-# Install dependencies
-npm install
+# Install dependencies (CI-friendly)
+npm ci
 
-# Run the entire Playwright test suite (headed or headless per config)
-npx playwright test
+# Run the multi-device functional regression suite
+npx playwright test -c playwright.functional.config.ts
 
-# Re-run a specific spec
-npx playwright test tests/checkout.spec.ts
+# Run the Chromium-only performance suite
+npx playwright test -c playwright.perf.config.ts
 
-# Inspect the last test run report
-npx playwright show-report
+# Compile TypeScript utilities (e.g., perf graph generator)
+npx tsc --project tsconfig.json
+
+# Generate PNG graphs from saved perf JSON results
+node ./dist/generate-perf-graphs.js
 ```
 
 ## Coding Style & Naming Conventions
 
-- **Indentation**: 2 spaces, as seen across `pages/*.ts` and `tests/*.ts`.
-- **File naming**: Page objects use `PascalCase` (`HomePage.ts`); specs use `kebab-case` with `.spec.ts` suffix (`checkout.spec.ts`).
-- **Function/variable naming**: camelCase for methods (`clickRealm`, `openFirstProduct`) and constants.
-- **Linting**: No automated lint config is committed; rely on TypeScript compiler and Playwright test runner errors. Consider adding ESLint locally if extra validation is needed.
+- **Indentation**: 2 spaces throughout page objects, specs, and configs.
+- **File naming**: Page objects use `PascalCase` (`StagingStorePage.ts`); specs are kebab/camel variants ending in `.spec.ts` (e.g., `homepageProdiPhone.spec.ts`).
+- **Function/variable naming**: camelCase for methods (`openFirstProduct`, `clickClose`) and constants.
+- **Linting**: No ESLint/Prettier config is committed; rely on TypeScript strict mode plus Playwright’s assertion failures.
 
 ## Testing Guidelines
 
-- **Framework**: `@playwright/test` (declared in `package.json`).
-- **Test files**: Located under `tests/`, following the `*.spec.ts` convention.
-- **Running tests**: `npx playwright test` (optionally target individual specs).
-- **Coverage**: No coverage tooling is configured; focus on scenario completeness and critical user journeys.
+- **Framework**: `@playwright/test` 1.55.x with device-specific projects (Chromium, WebKit, iPhone, iPad) and 3 retries.
+- **Test files**: Functional specs reside in `tests/*.spec.ts`; performance tests live in `tests/perf/`.
+- **Running tests**: `npx playwright test -c playwright.functional.config.ts` for UI coverage, `npx playwright test -c playwright.perf.config.ts` for metrics.
+- **Coverage**: No coverage tooling—focus on critical user journeys (realm selection, tutorials, cart) and on perf baselines.
 
 ## Commit & Pull Request Guidelines
 
-- **Commit format**: No enforced convention detected; the latest commit (`test push`) suggests free-form messages. Aim for descriptive, present-tense summaries (e.g., `feat: add checkout cart assertion`).
-- **PR process**: Not documented. Recommended practice is to link evidence such as Playwright reports and specify affected realms before requesting review.
-- **Branch naming**: Not specified; adopt a practical pattern like `feature/<short-description>` or `fix/<ticket>` to maintain clarity.
+- **Commit format**: No enforced convention; recent commits (`test`, `fixes`, `debug`) are terse. Prefer imperative summaries (e.g., `feat: add prod checkout spec`).
+- **PR process**: Functional suite runs on a weekday cron (`playwright-functional.yml`) and uploads reports; perf workflow is manual (`workflow_dispatch`). Include relevant Playwright HTML reports or perf artifacts when requesting review.
+- **Branch naming**: Not enforced; adopt `feature/<scope>` or `fix/<bug>` for clarity and reference the realm or device when possible.
 
 ---
 
@@ -50,12 +53,12 @@ npx playwright show-report
 
 ## 🎯 What This Repository Does
 
-Walmart Realm E2E is an end-to-end Playwright test suite that validates curated Walmart “Realm” experiences hosted on `walmart.emperia-staging.com`.
+Walmart Realm E2E hosts Playwright-based functional and performance tests that validate Walmart’s “Realm” immersive experiences across staging and production entry points.
 
 **Key responsibilities:**
-- Smoke-test realm selection and tutorial flows.
-- Exercise storefront interactions embedded within the experience iframe.
-- Verify cart behavior when products are added from immersive scenes.
+- Assert core navigation, tutorial dismissal, and cart flows for desktop, mobile, and prod URLs.
+- Measure per-realm rendering health (DOM timings, FPS, request failures) and persist metrics.
+- Generate visual performance baselines via Chart.js for regression tracking.
 
 ---
 
@@ -63,21 +66,22 @@ Walmart Realm E2E is an end-to-end Playwright test suite that validates curated 
 
 ### System Context
 ```
-Contributor → Playwright CLI → walmart.emperia-staging.com
-                        ↓
-                  Local test artifacts
+[Contributors] → [Playwright Test Runner] → [walmart.emperia-staging.com / walmartrealm.com]
+                           ↓
+                [playwright-report/, perf-results/, perf-graphs/]
 ```
 
 ### Key Components
-- **HomePage page object (`pages/HomePage.ts`)** – Encapsulates realm selection, tutorial dismissal, and high-level navigation helpers.
-- **StorePage page object (`pages/StorePage.ts`)** – Handles iframe traversal, product modal actions, and cart assertions.
-- **Spec collection (`tests/*.spec.ts`)** – Defines user journeys (homepage load, navigation, cart flows) using `@playwright/test` fixtures.
+- **Staging/Prod HomePage classes (`pages/*HomePage.ts`)** – Navigate feeds, pick realms, and close tutorials in nested iframes.
+- **Staging/Prod StorePage classes (`pages/*StorePage.ts`)** – Encapsulate iframe traversal, product modal control, cart updates, and media assertions.
+- **Performance harness (`tests/perf/realm.perf.spec.ts`)** – Iterates over `PERF_TARGET_URL` realms, captures navigation timing, FPS, and network failures, and emits JSON snapshots.
+- **Graphing utility (`scripts/generate-perf-graphs.ts`)** – Converts JSON metrics into PNG charts via `chartjs-node-canvas` for reporting.
 
 ### Data Flow
-1. Tests bootstrap via `@playwright/test`, instantiating `HomePage` or `StorePage` with the shared `page` fixture.
-2. `HomePage` navigates to `https://walmart.emperia-staging.com/#/feed`, selects a realm, and closes tutorials (main page or nested iframe).
-3. `StorePage` locates the nested experience iframe and triggers modal/product interactions.
-4. Assertions verify UI state (page title, URL, iframe visibility, cart count) before Playwright records results in `test-results/`.
+1. Developer installs dependencies and launches Playwright with the relevant config (functional or perf).
+2. Specs instantiate `HomePage` to hit `/feed`, choose a realm, and dismiss the tutorial overlay (main page + nested frames).
+3. `StorePage` helpers interact with the Experience iframe to open modals, add to cart, or start videos, using locator assertions (`expectMoreThanOneWalmartImage`).
+4. Performance runs additionally subscribe to network events, compute navigation timing + FPS, and write per-realm JSON files consumed by the graphing script.
 
 ---
 
@@ -85,82 +89,109 @@ Contributor → Playwright CLI → walmart.emperia-staging.com
 
 ```
 Walmart_Realm_E2E/
-├── package.json               # Playwright dependency and npm scripts
-├── playwright.config.ts       # Placeholder for shared test settings
-├── pages/
-│   ├── HomePage.ts            # Realm selection + tutorial helpers
-│   └── StorePage.ts           # Product modal + cart interactions
-├── tests/
-│   ├── checkout.spec.ts       # Cart count verification
-│   ├── homepage.spec.ts       # Landing page smoke tests
-│   ├── navigation.spec.ts     # Realm switching + iframe checks
-│   └── product.spec.ts        # Product modal visibility
-└── test-results/              # Playwright output artifacts
+├── pages/                        # Page Object Models for staging and prod realms
+├── tests/                        # Functional specs (desktop, prod, iPhone variants)
+│   └── perf/                     # Realm performance suite + typings
+├── scripts/                      # Utility scripts (perf graph generator)
+├── perf-results/                 # Saved JSON metrics from perf suite
+├── perf-graphs/                  # Generated PNG charts
+├── playwright.config.ts          # Default multi-project config
+├── playwright.functional.config.ts
+├── playwright.perf.config.ts
+├── playwright.env                # PERF_TARGET_URL definition
+├── tsconfig.json                 # Compiles scripts → dist/
+└── .github/workflows/            # Functional + perf GitHub Actions
 ```
 
 ### Key Files to Know
 
 | File | Purpose | When You'd Touch It |
 |------|---------|---------------------|
-| `pages/HomePage.ts` | Page object for feed navigation and tutorial dismissal. | Update when realm selection flows change. |
-| `pages/StorePage.ts` | Handles iframe logic, product modals, and cart actions. | Extend to cover new storefront behaviors. |
-| `tests/homepage.spec.ts` | Ensures the feed loads and tutorials appear. | Add smoke assertions for new realms. |
-| `tests/navigation.spec.ts` | Multi-step realm navigation and iframe checks. | Add journeys that span multiple scenes. |
-| `tests/product.spec.ts` | Opens product modals from experiences. | Validate new modal layouts or media assets. |
-| `tests/checkout.spec.ts` | Adds to cart and validates cart badge counts. | Cover checkout regressions or cart UX tweaks. |
-| `package.json` | Declares `@playwright/test` dependency. | Add tooling (linters, reporters) or scripts. |
-| `playwright.config.ts` | Central config for browsers, retries, reporters (currently empty). | Configure base URL, timeouts, retries, or reporters. |
+| `pages/StagingHomePage.ts` | Handles feed navigation and resilient tutorial dismissal logic. | Add selectors when new tutorial variants appear. |
+| `pages/StagingStorePage.ts` | Provides iframe helpers for products, media, and cart interactions. | Extend for new in-experience flows (video, hidden rooms). |
+| `tests/homepage*.spec.ts` | Smoke tests for staging/prod/iPhone homepages. | Add assertions for new realms or entry URLs. |
+| `tests/navigation*.spec.ts` | Multi-scene navigation, product modal, and video checks. | Expand for new cinematic workflows or unlockables. |
+| `tests/checkout*.spec.ts` | Cart badge/state verification across devices. | Validate cart regressions or alternate SKUs. |
+| `tests/perf/realm.perf.spec.ts` | Captures FPS + network data per realm. | Tune metrics, retries, or sampling duration. |
+| `scripts/generate-perf-graphs.ts` | Builds chart PNGs from perf JSON results. | Update visualization types or add new KPIs. |
+| `.github/workflows/playwright-functional.yml` | Weekday CI for functional suite with Slack alerting. | Modify schedule, add matrices, or tweak failure handling. |
+| `.github/workflows/playwright-perf.yml` | Manual perf workflow that compiles scripts and publishes artifacts. | Automate triggers or add upload destinations. |
 
 ---
 
 ## 🔧 Technology Stack
 
 ### Core Technologies
-- **Language:** TypeScript – Enables typed Playwright page objects and spec files.
-- **Framework:** `@playwright/test` 1.55.x – Provides fixtures, reporters, and cross-browser execution.
-- **Test Runner:** Playwright CLI – Orchestrates headless/headed browsers and produces artifacts.
-- **Target Application:** `walmart.emperia-staging.com` (cyber experience feed) – External system under test.
+- **Language:** TypeScript 5.9 (strict mode) – Safety for page objects and scripts.
+- **Framework/Test Runner:** `@playwright/test` 1.55 – Multi-device projects with retries, screenshots, video capture, and HTML/JSON reporting.
+- **Runtime:** Node.js 20 (per GitHub Actions) – Supports ESM interop and worker threads required by Playwright.
+- **Visualization:** `chart.js` + `chartjs-node-canvas` – Server-side PNG generation for performance tracking.
 
 ### Key Libraries
-- **`@playwright/test`** – Supplies the `test/expect` APIs, fixtures, and assertions used everywhere.
+- **`dotenv`** – Loads `playwright.env` before tests so performance URLs are available outside `codegen`.
+- **`ts-node` / `typescript`** – Compiles and runs the graphing script when not using prebuilt JS.
 
 ### Development Tools
-- **Node.js / npm** – Dependency management and script execution.
-- **Playwright HTML report** – Inspect previous runs via `npx playwright show-report`.
+- **Playwright HTML/JSON reporters** – Stored in `playwright-report/` for post-run triage.
+- **GitHub Actions** – Scheduled functional suite and on-demand perf suite with Slack notifications.
 
 ---
 
 ## 🌐 External Dependencies
 
 ### Required Services
-- **walmart.emperia-staging.com** – Staging environment providing the immersive realms and embedded store iframes.
+- **`walmart.emperia-staging.com`** – Primary staging realm feed exercised by most specs.
+- **`walmartrealm.com`** – Production feed used by `Prod*` specs.
+- **Slack webhook (`SLACK_WEBHOOK_URL` secret)** – Receives CI alerts when functional tests fail.
 
 ### Optional Integrations
-- None documented; tests currently interact only with the staging front-end.
+- None beyond Playwright-managed browsers; all other data sources are local artifacts.
+
+---
+
+### Environment Variables
+
+```bash
+# Required for performance runs (comma-separated realm URLs)
+PERF_TARGET_URL="https://walmart.emperia-staging.com/#/viewer/..."
+
+# Secrets provided in CI (not stored locally)
+SLACK_WEBHOOK_URL= # used by Functional Tests workflow
+```
 
 ---
 
 ## 🔄 Common Workflows
 
-### Realm Smoke Test
-1. Create or update a spec under `tests/` that instantiates `HomePage`.
-2. Use `home.open()` and `home.clickRealm("<Realm Name>")` to reach the experience.
-3. Call `home.clickClose()` to dismiss tutorials before performing assertions.
-**Code path:** `tests/<spec>.spec.ts` → `HomePage` methods → remote realm UI.
+### Functional Regression Sweep
+1. `npm ci && npx playwright test -c playwright.functional.config.ts` in the repo root.
+2. Inspect `playwright-report/` (HTML + JSON) for unexpected failures.
+3. Update page objects/selectors when iframe content shifts, then re-run the suite.
+**Code path:** `tests/*.spec.ts` → `pages/*HomePage.ts` → `pages/*StorePage.ts`.
 
-### Product Modal + Cart Validation
-1. After entering a realm, instantiate `StorePage` and call `openFirstProduct()`.
-2. Use `addProduct()` to trigger cart updates, then assert via iframe locators.
-3. Optionally re-use `expectMoreThanOneWalmartImage()` to verify media rendering.
-**Code path:** `tests/checkout.spec.ts` → `StorePage` methods → experience iframe DOM.
+### Performance Benchmarking
+1. Edit `playwright.env` or pass `PERF_TARGET_URL` via CI `workflow_dispatch`.
+2. Run `npx playwright test -c playwright.perf.config.ts` to emit JSON entries to `perf-results/`.
+3. Compile scripts (`npx tsc`) and execute `node dist/generate-perf-graphs.js` to refresh PNG dashboards.
+**Code path:** `tests/perf/realm.perf.spec.ts` → `perf-results/*.json` → `scripts/generate-perf-graphs.ts`.
+
+---
+
+## 📈 Performance & Scale
+
+- **Retries & Workers:** Functional suites default to 3 retries with a single worker to minimize flake while interacting with 3D content; adjust `workers` cautiously because the realms are network-heavy.
+- **Artifacts:** Performance runs can create dozens of JSON files; keep `perf-results/` trimmed or archive older data before generating graphs.
+- **Timeouts:** Functional specs set 60s navigation timeouts; perf suites extend to 90s to accommodate slow iframe boot.
 
 ---
 
 ## 🚨 Things to Be Careful About
 
-### 🔒 Security & Stability
-- Tests rely on a third-party staging experience; DOM changes (iframe titles, selectors, tutorial button labels) will break locators quickly—keep selectors resilient and scoped.
-- `StorePage` accesses nested iframes; ensure waits are in place before interacting to avoid flaky runs.
-- No secrets are stored in the repo, but environment variables (if introduced) should be handled via Playwright config or CI secrets, not committed.
+### 🔒 Security Considerations
+- `playwright.env` should store only non-secret realm URLs; secrets such as Slack webhooks belong in CI variables.
+- Page objects aggressively use `force: true` clicks inside iframes. Revisit selectors before increasing force usage to avoid masking real regressions.
+- Performance tests log every API call/failed request—share artifacts cautiously if URLs might reveal staging resources.
 
-*Update to last commit: 84c05fd41d1d703caae1725438e37d4dcaa0daf8*
+Last updated: 2026-01-27
+
+*Update to last commit: 6e1ba6fd1352070506c33edbdf9df2b8af77c496*

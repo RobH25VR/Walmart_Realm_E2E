@@ -7,3 +7,4 @@ test-results/tests-checkout-add-product-to-cart-and-verify-cart-count/error-cont
 /node_modules
 /perf-results
 /allure-results
+tests/.DS_Store

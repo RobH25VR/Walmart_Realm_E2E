@@ -66,7 +66,7 @@ test.describe("UI navigation", () => {
 
     await store.clickFindSpark();
     await page.waitForTimeout(2000);
-    page.goto('https://walmartrealm.com/#/viewer/homewithbao/idolvanityedit')
+    await page.goto('https://walmartrealm.com/#/viewer/homewithbao/idolvanityedit');
     await home.clickClose();
     await page.waitForTimeout(1000);
 
